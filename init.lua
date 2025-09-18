@@ -102,13 +102,22 @@ vim.g.have_nerd_font = false
 vim.o.number = true
 -- You can also add relative line numbers, to help with jumping.
 --  Experiment for yourself to see if you like it!
--- vim.o.relativenumber = true
+vim.o.relativenumber = true
 
 -- Enable mouse mode, can be useful for resizing splits for example!
 vim.o.mouse = 'a'
 
 -- Don't show the mode, since it's already in the status line
 vim.o.showmode = false
+
+-- Open netrw with <leader>e
+vim.keymap.set('n', '<leader>e', ':Ex<CR>', { noremap = true, silent = true })
+
+-- Tabs are 2 spaces, and tab = spaces
+vim.opt.tabstop = 2 -- number of visual spaces per TAB
+vim.opt.shiftwidth = 2 -- spaces for auto-indent
+vim.opt.expandtab = true -- convert TAB to spaces
+vim.opt.softtabstop = 2 -- how many spaces <Tab> inserts/deletes
 
 -- Sync clipboard between OS and Neovim.
 --  Schedule the setting after `UiEnter` because it can increase startup-time.
@@ -255,6 +264,116 @@ require('lazy').setup({
   --
   -- Use `opts = {}` to automatically pass options to a plugin's `setup()` function, forcing the plugin to be loaded.
   --
+
+  {
+    'ThePrimeagen/harpoon',
+    branch = 'harpoon2', -- v2 branch, 'harpoon7' doesn't exist
+    dependencies = { 'nvim-lua/plenary.nvim' },
+    config = function()
+      local harpoon = require 'harpoon'
+      -- Setup Harpoon
+      harpoon:setup()
+
+      -- Table to track created lists per directory
+      local created_lists = {}
+      local lists_file = vim.fn.stdpath 'data' .. '/harpoon_lists.json'
+
+      -- Helper to get current directory key
+      local function get_cwd_key()
+        return vim.loop.cwd()
+      end
+
+      -- Load saved lists from file
+      local function load_lists()
+        local ok, err = pcall(function()
+          local file = io.open(lists_file, 'r')
+          if file then
+            local content = file:read '*all'
+            file:close()
+            if content and content ~= '' then
+              created_lists = vim.json.decode(content) or {}
+            end
+          end
+        end)
+        if not ok then
+          created_lists = {}
+        end
+      end
+
+      -- Save lists to file
+      local function save_lists()
+        local ok, err = pcall(function()
+          local file = io.open(lists_file, 'w')
+          if file then
+            file:write(vim.json.encode(created_lists))
+            file:close()
+          end
+        end)
+      end
+
+      -- Helper to add list to tracking
+      local function track_list(name)
+        local cwd = get_cwd_key()
+        if not created_lists[cwd] then
+          created_lists[cwd] = {}
+        end
+        if not vim.tbl_contains(created_lists[cwd], name) then
+          table.insert(created_lists[cwd], name)
+          save_lists() -- Save immediately when a new list is added
+        end
+      end
+
+      -- Load existing lists on startup
+      load_lists()
+
+      -- Current list reference (starts as default)
+      local current_list = harpoon:list()
+
+      -- Helper to set the current list
+      local function set_list(name)
+        current_list = harpoon:list(name)
+        track_list(name) -- Track this list
+        print('Switched to Harpoon list: ' .. name)
+      end
+
+      -- <leader>hh → Add current file
+      vim.keymap.set('n', '<leader>hh', function()
+        current_list:add()
+      end, { desc = 'Harpoon: Add file' })
+
+      -- <leader>ha → Show all lists
+      vim.keymap.set('n', '<leader>ha', function()
+        local cwd = get_cwd_key()
+        local lists = created_lists[cwd] or {}
+        if #lists > 0 then
+          table.sort(lists)
+          print('Lists in current dir: ' .. table.concat(lists, ' '))
+        else
+          print 'No lists created in current directory yet'
+        end
+      end, { desc = 'Harpoon: Show all lists in current directory' })
+
+      -- <leader>hl → Toggle quick menu
+      vim.keymap.set('n', '<leader>hl', function()
+        harpoon.ui:toggle_quick_menu(current_list)
+      end, { desc = 'Harpoon: List files' })
+
+      -- <leader>hn → New or switch list
+      vim.keymap.set('n', '<leader>hn', function()
+        local name = vim.fn.input 'Harpoon list name: '
+        if name ~= '' then
+          set_list(name)
+        end
+      end, { desc = 'Harpoon: New/Switch list' })
+
+      -- <leader>h1 … <leader>h9 → Jump to file 1–9
+      for i = 1, 9 do
+        vim.keymap.set('n', '<leader>' .. i, function()
+          current_list:select(i)
+        end, { desc = 'Harpoon: Go to file ' .. i })
+      end
+    end,
+  },
 
   -- Alternatively, use `config = function() ... end` for full control over the configuration.
   -- If you prefer to call `setup` explicitly, use:
@@ -1011,6 +1130,18 @@ require('lazy').setup({
     },
   },
 })
+
+-- for i = 1, 9 do
+-- vim.keymap.set('n', i .. '<Space>', function()
+-- vim.cmd(i .. 'tabnext')
+-- end, { noremap = true })
+-- end
+
+vim.keymap.set('n', 'WW', ':w<CR>', { noremap = true, silent = true })
+
+vim.opt.tabstop = 4 -- A tab character = 4 spaces
+vim.opt.shiftwidth = 4 -- Indents = 4 spaces
+vim.opt.expandtab = true -- Tabs become spaces
 
 -- The line beneath this is called `modeline`. See `:help modeline`
 -- vim: ts=2 sts=2 sw=2 et
